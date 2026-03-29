@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=DM+Mono:wght@300;400&display=swap');
+
+/* ─── Reset ──────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─── Design tokens ──────────────────────────────────────────────────────── */
+:root {
+  --bg: #f4f0e8;
+  --bg-panel: #edeae0;
+  --bg-deep: #e6e2d8;
+  --bg-raised: #e0dcd2;
+  --bg-invert: #0c0c0c;
+
+  --orange: #e84000;
+  --orange-d: #b33200;
+  --orange-pale: #fce8e0;
+  --orange-mid: rgba(232, 64, 0, 0.12);
+
+  --text: #0c0c0c;
+  --text-mid: #3a3834;
+  --text-dim: #7a7468;
+  --text-muted: #a8a298;
+
+  --border: #d4cfc5;
+  --border-hi: #c4bfb5;
+
+  --green: #1a7a42;
+  --green-pale: #e2f2e8;
+
+  --red: #c0392b;
+  --red-pale: #fce8e6;
+
+  --amber: #c47a00;
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────── */
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-deep);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-hi);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hi) var(--bg-deep);
+}
+
+/* ─── Utilities ──────────────────────────────────────────────────────────── */
+.mono {
+  font-family: 'DM Mono', 'Courier New', monospace;
+}
+
+/* ─── Animations ─────────────────────────────────────────────────────────── */
+@keyframes fadeSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes growBar {
+  0% {
+    transform: scaleY(0);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes growFill {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: var(--fill-width, 50%);
+  }
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes tickerScroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}

@@ -1,0 +1,8 @@
+anthropic>=0.25.0
+yfinance>=0.2.38
+pandas>=2.0.0
+pandas_market_calendars>=4.3.0
+requests>=2.31.0
+feedparser>=6.0.10
+python-dotenv>=1.0.0
+pytz>=2024.1
