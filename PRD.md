@@ -1,10 +1,12 @@
 # Product Requirements Document
-## NVIDIA Daily Report — Agentic Attention & Thesis Monitor
+## NVDA Daily Strategist — Agentic Attention & Thesis Monitor
 
-**Version:** 1.1 — MVP
+**Version:** 1.2 — MVP (Dashboard-Only)
 **Date:** 2026-03-29
 **Owner:** Personal tool
-**Status:** Draft
+**Status:** Active
+
+> **v1.2 Change:** Email delivery removed. Dashboard is the sole output channel. All journey and technical references updated accordingly.
 
 ---
 
@@ -18,15 +20,15 @@ There is no tool today that answers the specific question a long-term holder act
 
 Existing tools are either too broad (general financial dashboards), too noisy (news aggregators), or too signal-focused (trading tools optimized for entry/exit decisions). None of them are calibrated to the long-term holder's actual goal: protect the thesis, ignore the noise, and allocate attention wisely.
 
-This product fills that gap with a single structured daily email and a web dashboard, powered by an agentic AI that gathers data, reasons over it, validates its own conclusions, and produces two actionable scores with clear explanations.
+This product fills that gap with a local Next.js dashboard, updated daily by an agentic AI pipeline that gathers data, reasons over it, validates its own conclusions, and produces two actionable scores with clear explanations.
 
 ---
 
 ## 2. Goals and Non-Goals
 
 ### Goals (MVP)
-- Deliver one structured email per NYSE trading day (including half-days) at 8:30am ET
-- Serve the same report on a Next.js web dashboard
+- Run the pipeline automatically on each NYSE trading day (including half-days) at 8:20am ET
+- Publish a structured report to a local Next.js web dashboard by 8:30am ET
 - Produce an **Attention Score** (0–10) and a **Thesis Risk Score** (0–10) with explanations
 - Distinguish company-specific catalysts from macro noise
 - Filter recycled or low-novelty headlines
@@ -35,6 +37,7 @@ This product fills that gap with a single structured daily email and a web dashb
 - Log each day's output to a local JSON file consumed by the dashboard
 
 ### Non-Goals (MVP)
+- No email delivery (removed in v1.2)
 - No price prediction or buy/sell signals
 - No portfolio tracking or position sizing
 - No peer stock coverage (AMD, AVGO, TSM, SOXX)
@@ -63,54 +66,53 @@ This product fills that gap with a single structured daily email and a web dashb
 
 #### Journey 1: Normal low-noise day (most days)
 
-1. Email arrives at 8:30am ET
-2. Subject line reads: `NVDA Daily Report — Attention: 2.5/10 | Thesis Risk: 1/10`
-3. User glances at subject line, sees low scores
-4. Skips detailed reading, proceeds with their morning
+1. User opens dashboard at `localhost:3000` before market open
+2. Page header shows: `Attention: 2.5/10 | Thesis: INTACT`
+3. User sees low scores at a glance — no scrolling needed
+4. Closes tab, proceeds with their morning
 5. **Outcome:** Zero wasted attention. Day correctly filtered.
 
 ---
 
 #### Journey 2: High-attention day (uncommon)
 
-1. Email arrives at 8:30am ET
-2. Subject line reads: `NVDA Daily Report — Attention: 8.0/10 | Thesis Risk: 6.5/10`
-3. User opens the email immediately
-4. Reads: NVDA is down 3.8% pre-market, significantly underperforming SOXX, driven by a new AI chip export restriction headline
-5. Reads the interpretation: "This appears to be a thesis-relevant event, not routine macro volatility"
-6. Reads suggested behavior: "Monitor the open. Assess whether sell-side responds with guidance revisions"
-7. User optionally opens the web dashboard to view score history and trend
-8. **Outcome:** Attention correctly allocated to a day that warranted it
+1. User opens dashboard and sees: `Attention: 8.0/10 | Watch Level: HIGH`
+2. Reads pre-market snapshot: NVDA down 3.8%, underperforming SOXX by -1.2%
+3. Reads top driver: new AI chip export restriction headline, novel, thesis-adjacent
+4. Reads interpretation: "structural not noise"
+5. Reads suggested action: "monitor the open, watch for guidance revision"
+6. Navigates to `/history` to see how rare a score this high is
+7. **Outcome:** Attention correctly allocated to a genuinely important day
 
 ---
 
 #### Journey 3: Macro noise day (moderate)
 
-1. Email arrives at 8:30am ET
-2. Subject line reads: `NVDA Daily Report — Attention: 6.0/10 | Thesis Risk: 1.5/10`
-3. User opens email or dashboard
-4. Reads: Market-wide risk-off on CPI data. NVDA down in line with QQQ and SOXX. No NVDA-specific news
-5. Reads interpretation: "This is macro-driven. Long-term Nvidia thesis appears unchanged"
-6. User notes it, decides not to act
-7. **Outcome:** User has context and confidence to stay the course
+1. User opens dashboard: `Attention: 6.0/10 | Thesis: INTACT`
+2. Reads: market-wide CPI risk-off. NVDA moving in line with QQQ/SOXX. No NVDA-specific news.
+3. Interpretation confirms: macro-driven, thesis unchanged
+4. User notes it, decides not to act
+5. **Outcome:** Confidence to stay the course on a volatile-looking day
 
 ---
 
-#### Journey 4: Half-trading day (e.g. day after Thanksgiving)
+#### Journey 4: Half-trading day
 
-1. NYSE half-day detected via trading calendar
-2. Agent runs at 8:30am ET as normal
-3. Email and dashboard note: "Half-trading day — market closes at 1:00pm ET"
-4. Report is generated with reduced macro weight (less likely to be a high-signal day)
-5. **Outcome:** User is aware of shortened session without needing to check NYSE schedule
+1. NYSE half-day detected via `pandas_market_calendars`
+2. Pipeline runs at 8:20am ET as normal
+3. Dashboard header shows "NYSE · HALF SESSION" badge
+4. Report notes reduced session length; macro weight adjusted down
+5. **Outcome:** User aware of shortened session without checking NYSE schedule
 
 ---
 
 #### Journey 5: Data degradation day
 
-1. Email arrives at 8:30am ET with subject: `NVDA Daily Report — Attention: [Partial] | Thesis Risk: 5.0/10`
-2. Email and dashboard note: "News API unavailable. Score based on market data only. Retry attempted once."
-3. **Outcome:** Transparency maintained, trust preserved
+1. Pipeline runs but NewsAPI is unavailable
+2. After one retry, pipeline continues with market data only
+3. Dashboard shows amber warning banner: "PARTIAL DATA — Failed sources: news"
+4. Scores clearly marked as partial-data estimates
+5. **Outcome:** Transparency maintained, scores still useful for market-data signals
 
 ---
 
@@ -118,12 +120,12 @@ This product fills that gap with a single structured daily email and a web dashb
 
 | Metric | Target | Measurement |
 |---|---|---|
-| **Attention accuracy** | High-score days (≥7) feel justified in retrospect ≥80% of the time | Subjective weekly review against JSON log |
-| **False positive rate** | Fewer than 2 unjustified high-score days per month | Manual tagging in log |
+| **Attention accuracy** | High-score days (≥7) feel justified in retrospect ≥80% of the time | Subjective weekly review of `/history` |
+| **False positive rate** | Fewer than 2 unjustified high-score days per month | Manual review via history table |
 | **False negative rate** | No more than 1 genuinely important day missed per quarter | Post-hoc review of days scored <4 |
 | **Time to decision** | User can determine watch/ignore in under 20 seconds | Subjective assessment |
-| **Daily completion rate** | Report delivered on ≥95% of scheduled NYSE trading days | Delivery log |
-| **Noise reduction** | User reads full report on <40% of days (score-filtered) | Open behavior vs subject-line dismissal |
+| **Daily completion rate** | Report available on dashboard by 8:30am on ≥95% of NYSE trading days | Pipeline log |
+| **Noise reduction** | User spends >10 seconds on <40% of daily reports (score-filtered) | Self-assessment |
 
 ---
 
@@ -131,12 +133,12 @@ This product fills that gap with a single structured daily email and a web dashb
 
 | Metric | Target |
 |---|---|
-| **Delivery reliability** | Email delivered by 8:30am ET on ≥95% of NYSE trading days |
+| **Pipeline reliability** | Completes successfully on ≥95% of NYSE trading days |
 | **End-to-end runtime** | Full pipeline completes in under 4 minutes |
 | **Data freshness** | Pre-market data reflects ≤15-minute delay at time of run |
 | **Validation loop convergence** | Re-scoring loop completes within 2 iterations on ≥99% of runs |
 | **Score stability** | Same input on repeated runs produces score within ±0.5 points |
-| **Graceful degradation** | Email and dashboard still served with partial data flag on 100% of partial-failure runs |
+| **Graceful degradation** | Dashboard still shows report with partial data flag on 100% of partial-failure runs |
 | **LLM token budget** | Total Claude API tokens per run stays under 8,000 |
 | **Log integrity** | 100% of completed runs appended to local history file |
 | **Dashboard availability** | Next.js app serves latest report within 30 seconds of pipeline completion |
@@ -151,36 +153,35 @@ This product fills that gap with a single structured daily email and a web dashb
 /Users/yokeroil/Documents/NVDA/
 ├── agent/                        # Python agentic pipeline
 │   ├── main.py                   # Entry point — orchestrates full pipeline
-│   ├── scheduler.py              # NYSE calendar check + cron coordination
+│   ├── config.py                 # Scoring weights, constants, source tiers
+│   ├── scheduler.py              # NYSE calendar check
 │   ├── tools/
-│   │   ├── market_data.py        # yfinance: price, SMA, pre-market
+│   │   ├── market_data.py        # yfinance: price, SMA, pre-market, peers
 │   │   ├── news_fetcher.py       # NewsAPI + Nvidia IR RSS
 │   │   ├── macro_calendar.py     # Economic event RSS feed
-│   │   └── source_verifier.py   # Trusted source allowlist checker
+│   │   └── source_verifier.py    # Trusted source allowlist checker
 │   ├── scoring/
 │   │   ├── classifier.py         # Claude API: event type + novelty + relevance
-│   │   ├── scorer.py             # Rule-based + Claude: attention + thesis scores
+│   │   ├── scorer.py             # Rule-based scoring engine
 │   │   └── validator.py          # Validation loop logic
 │   ├── reporting/
-│   │   ├── email_builder.py      # HTML email construction
-│   │   ├── email_sender.py       # Gmail SMTP delivery
-│   │   └── logger.py             # JSON log append
+│   │   └── logger.py             # Atomic JSON log writer
 │   └── .env                      # API keys (never committed)
-├── dashboard/                    # Next.js web dashboard
+├── dashboard/                    # Next.js 14 App Router
 │   ├── app/
 │   │   ├── page.tsx              # Today's report
-│   │   ├── history/page.tsx      # Score history view
-│   │   └── api/reports/route.ts  # API route reading local JSON log
-│   ├── components/
-│   │   ├── ScoreCard.tsx
-│   │   ├── PreMarketSnapshot.tsx
-│   │   ├── DriversList.tsx
-│   │   ├── InterpretationBlock.tsx
-│   │   └── ScoreHistoryChart.tsx
-│   └── package.json
+│   │   ├── history/page.tsx      # Score history + all reports table
+│   │   ├── report/[date]/page.tsx# Archived report by date
+│   │   └── api/reports/          # Server-side JSON file reads
+│   ├── components/               # ScoreHero, TickerTape, MetricsSection, etc.
+│   └── lib/
+│       ├── reports.ts            # File-system data access layer
+│       └── types.ts              # TypeScript interfaces
 ├── data/
-│   └── nvda_daily_log.json       # Persistent report history
-├── PRD.md                        # This document
+│   └── nvda_daily_log.json       # Persistent report history (gitignored)
+├── requirements.txt
+├── PRD.md
+├── ARCHITECTURE.md
 └── README.md
 ```
 
@@ -188,155 +189,92 @@ This product fills that gap with a single structured daily email and a web dashb
 
 ### 6.2 Agent Pipeline — Step by Step
 
-The agent runs as a single Python process triggered by a cron job at 8:20am ET (10-minute buffer).
+The agent runs as a single Python process triggered by cron at 8:20am ET.
 
-**Step 0 — Trading Day Check**
+**Phase 0 — NYSE Calendar Check**
+Using `pandas_market_calendars`, verify today is a valid NYSE trading day. Exit cleanly if not. Flag half-days.
 
-Using `pandas_market_calendars`, verify today is a valid NYSE trading day (full or half-session). If not a trading day, exit silently. If a half-day, flag it in the report context.
+**Phase 1 — Parallel Data Gathering** (`asyncio.gather`)
 
-**Step 1 — Data Gathering (parallel tool calls)**
-
-| Tool | Source | Data Collected |
+| Tool | Source | Data |
 |---|---|---|
-| `get_premarket_price` | yfinance | NVDA pre-market price, % change vs prior close |
-| `get_benchmark_prices` | yfinance | QQQ, SOXX pre-market % change |
-| `get_moving_averages` | yfinance | NVDA 20d, 50d, 200d SMA; % distance from current price |
-| `get_nvda_news` | NewsAPI free tier + Nvidia IR RSS | Headlines, sources, timestamps from last 18 hours |
-| `get_macro_calendar` | Investing.com RSS or FXStreet economic calendar RSS | Scheduled macro events for today |
+| `get_market_data()` | yfinance | NVDA price, % change, 20d/50d/200d SMA, peers, VIX, 10Y |
+| `get_nvda_news()` | NewsAPI free + Nvidia IR RSS | Headlines last 18h (extended to 24h if large premarket move) |
+| `get_macro_events()` | FXStreet RSS / Dow Jones RSS | Today's scheduled economic events |
 
-**Step 2 — Classification (Claude API, first pass)**
+**Phase 2 — News Classification** (Claude API, single batch call)
+- Event type, novelty, thesis relevance, relevance score per item
+- Prompt injection protection: headlines treated as data only
 
-For each news item, Claude classifies:
-- **Event type:** earnings/guidance, product launch, export control/regulation, hyperscaler capex, supply chain, analyst action, macro event, media noise
-- **Novelty:** new information vs recycled headline
-- **Relevance:** thesis-relevant vs generic market chatter
+**Phase 3 — Score Computation** (rule-based + Claude)
+- Attention Score (4 dimensions, weighted)
+- Thesis Risk Score (4 dimensions, weighted)
 
-**Step 3 — Scoring (rule-based + Claude)**
+**Phase 4 — Validation Loop** (conditional Claude call)
+- Triggers if: score ≥ 6 OR (score < 3 AND abs(premarket) > 2%)
+- Max 2 iterations; returns confidence level
+
+**Phase 5 — Report Generation** (Claude API)
+- Top 3 drivers, interpretation, suggested action
+
+**Phase 6 — Log**
+- Atomic write to `data/nvda_daily_log.json`
+- Dashboard reflects new entry on next page load
+
+---
+
+### 6.3 Scoring Framework
 
 **Attention Score (0–10)**
 
-| Dimension | Weight | Description |
-|---|---|---|
-| Company catalyst strength | 35% | Significance of NVDA-specific news |
-| Market reaction strength | 25% | Pre-market move relative to QQQ and SOXX |
-| Macro risk intensity | 20% | Severity of scheduled or surprise macro events |
-| Long-term thesis relevance | 20% | Whether today's information is new and thesis-relevant |
+| Dimension | Weight |
+|---|---|
+| Company catalyst strength | 35% |
+| Market reaction strength | 25% |
+| Macro risk intensity | 20% |
+| Long-term thesis relevance | 20% |
 
 **Thesis Risk Score (0–10)**
 
-| Dimension | Weight | Description |
-|---|---|---|
-| Official disclosure or guidance change | 40% | Earnings, margins, forward guidance |
-| Regulatory / policy risk | 30% | Export controls, government action affecting AI chips |
-| Demand signal change | 20% | Hyperscaler capex shifts, customer cancellations |
-| Competitive threat | 10% | Credible new competitive development |
-
-**Step 4 — Validation Loop (conditional)**
-
-Trigger conditions:
-- Score ≥ 6 on either dimension, OR
-- Score < 3 but pre-market move > ±2%
-
-Claude receives raw data alongside its initial scores and re-evaluates: "Are these scores consistent with the evidence? If not, produce revised scores."
-
-- Maximum 2 iterations
-- If not converged after 2 passes: scores accepted, "Confidence: LOW" flag added
-
-**Conditional tool calls within the loop:**
-- Pre-market move > ±2%: extend news lookback to 24 hours
-- Official Nvidia IR detected: force Thesis Risk re-evaluation
-- Macro event scheduled: increase macro risk weight by 5%
-- Source not in trusted allowlist: call `verify_source_credibility` before accepting signal
-
-**Step 5 — Report Generation (Claude API)**
-
-Claude generates structured report content: scores, top 3 drivers, interpretation, suggested behavior, sources list.
-
-**Step 6 — Delivery and Logging**
-
-- HTML email sent via Gmail SMTP
-- Report JSON appended to `data/nvda_daily_log.json`
-- Dashboard auto-reflects new entry on next page load
+| Dimension | Weight |
+|---|---|
+| Official disclosure / guidance change | 40% |
+| Regulatory / policy risk | 30% |
+| Demand signal change | 20% |
+| Competitive threat | 10% |
 
 ---
 
-### 6.3 Email Format
+### 6.4 Dashboard (Next.js 14)
 
-**Subject line:**
-```
-NVDA Daily Report — Attention: 7.5/10 | Thesis Risk: 3.0/10 [HIGH WATCH]
-```
-
-**Body (HTML):**
-```
-Pre-Market Snapshot
-────────────────────────────────
-NVDA:   -2.3% pre-market
-QQQ:    -0.4%   |   SOXX: -1.1%   |   Relative: NVDA -1.2% vs SOXX
-
-Moving Average Context
-  vs 20d SMA:  -4.1%  ▼
-  vs 50d SMA:  +8.3%  ▲
-  vs 200d SMA: +41.2% ▲
-
-────────────────────────────────
-Attention Score:    7.5 / 10   [WATCH LEVEL: HIGH]
-Thesis Risk Score:  3.0 / 10   [THESIS: INTACT]
-────────────────────────────────
-
-Top Drivers
-  1. NVDA significantly underperforming SOXX pre-market (-1.2% relative)
-  2. New export control headline — AI chip restrictions to additional markets
-  3. CPI release scheduled 8:30am ET today
-
-Interpretation
-  This looks like a meaningful day worth monitoring. The export control
-  headline is new (not recycled) and directly relevant to NVDA's
-  international revenue exposure. However, the thesis remains intact —
-  no guidance change or structural demand shift detected.
-
-Suggested Behavior
-  Monitor the open and early price confirmation. Distinguish macro-led
-  weakness from NVDA-specific thesis change.
-
-Sources
-  [1] Reuters — "US expands AI chip export restrictions" — 6:14am ET
-  [2] Pre-market data: yfinance (8:20am ET snapshot)
-  [3] BLS CPI release scheduled 8:30am ET
-```
-
----
-
-### 6.4 Dashboard (Next.js)
-
-**Pages:**
+**Routes:**
 
 | Route | Content |
 |---|---|
-| `/` | Today's report: scores, pre-market snapshot, drivers, interpretation |
-| `/history` | Score history chart (Attention + Thesis Risk over time), table of past reports |
-| `/report/[date]` | Full report for a specific past date |
+| `/` | Today's report — scores, ticker tape, metrics, drivers, interpretation |
+| `/history` | Score trend chart (Recharts) + full reports table |
+| `/report/[date]` | Full archived report for any past date |
 
-**Key components:**
+**Key Components:**
 
 | Component | Description |
 |---|---|
-| `ScoreCard` | Displays score (0–10) with color-coded watch level label |
-| `PreMarketSnapshot` | NVDA/QQQ/SOXX prices + SMA distance indicators |
-| `DriversList` | Numbered list of top 3 drivers |
-| `InterpretationBlock` | Interpretation + suggested behavior text |
-| `ScoreHistoryChart` | Line chart of Attention and Thesis Risk scores over time |
+| `ScoreHero` | Giant attention score with watch level badge |
+| `TickerTape` | Scrolling dark strip: NVDA, peers, benchmarks, macro events |
+| `MetricsSection` | 7-day history bars, peer comparison, context metrics grid |
+| `DriversList` | Top 3 signal drivers with type labels and flags |
+| `InterpretationBlock` | Dark inverted block with interpretation + suggested action |
+| `RightPanel` | Thesis score, pre-market prices, SMA bars, streak dots, sources |
+| `ScoreHistoryChart` | Recharts dual-line chart (Attention + Thesis Risk) |
 
-**Data source:** Dashboard reads directly from `data/nvda_daily_log.json` via a Next.js API route (`/api/reports`). No separate database for MVP.
+**Data source:** Server-side `fs.readFileSync` in Next.js API routes. No database. No network exposure.
 
-**Design style:**
-- Calm, financial-grade aesthetic — dark background, clean typography
-- Score ≥ 7: amber highlight
-- Score ≥ 9: red highlight
-- Score < 4: muted/grey treatment
-- Thesis Risk ≥ 6: "THESIS: MONITOR" warning label
-- Mobile-responsive
-- No login required (local tool)
+**Design language:**
+- Off-white background (`#f4f0e8`), orange accent (`#e84000`), Barlow Condensed + DM Mono
+- Orange vertical accent bar (structural identity element)
+- Dark ticker tape strip (deliberate contrast — status bar convention)
+- Score ≥ 7: orange. Score ≥ 9: red. Thesis at_risk: red. Intact: green.
+- No login required
 
 ---
 
@@ -347,51 +285,44 @@ Sources
 | Layer | Technology |
 |---|---|
 | Language | Python 3.11+ |
-| LLM | Claude API (claude-sonnet-4-6) |
+| LLM | Claude API (`claude-sonnet-4-6`) |
 | Market data | yfinance |
 | News | NewsAPI free tier + Nvidia IR RSS |
-| Macro calendar | Investing.com RSS or FXStreet economic calendar RSS |
+| Macro calendar | FXStreet RSS / Dow Jones RSS (with SSL fallback) |
 | Trading calendar | pandas_market_calendars |
-| Email delivery | Gmail SMTP (smtplib + email) |
 | Scheduler | macOS cron job |
 | Persistence | Local JSON (`data/nvda_daily_log.json`) |
-| Dashboard | Next.js 14+ (App Router) |
+| Dashboard | Next.js 14 App Router (TypeScript) |
+| Charts | Recharts |
 
 ### 7.2 Claude API Usage Strategy
 
-To stay within ~8,000 tokens/run:
-- Batch all news classification in a single prompt
-- Use structured JSON output for scores to minimize verbosity
-- Validation loop triggered conditionally (most days: 0 iterations)
-- Report generation uses a templated prompt with strict length constraint
+Budget: <8,000 tokens/run
+
+| Phase | Call | Est. Tokens |
+|---|---|---|
+| Phase 2 | News classification (batch) | ~2,000 |
+| Phase 3 | Score computation | ~1,500 |
+| Phase 4 | Validation (conditional, ×0–2) | ~0–2,000 |
+| Phase 5 | Report generation | ~1,500 |
 
 ### 7.3 Trusted Source Allowlist
 
-**Tier 1 — Always trusted (official):**
-- investor.nvidia.com, SEC EDGAR, federalregister.gov
-
-**Tier 2 — Trusted financial news:**
-- reuters.com, bloomberg.com, wsj.com, ft.com, barrons.com, seekingalpha.com (articles only)
-
-**Tier 3 — Conditional (flagged, low weight):**
-- Social media, substack, unrecognized domains
+**Tier 1 — Official:** investor.nvidia.com, sec.gov, federalregister.gov
+**Tier 2 — Financial news:** reuters.com, bloomberg.com, wsj.com, ft.com, barrons.com, cnbc.com
+**Tier 3 — Unverified:** all others (accepted with downweight + flag)
 
 ### 7.4 API Key Management
 
-Stored in `agent/.env` (never committed to version control):
+`agent/.env` (gitignored):
 ```
 ANTHROPIC_API_KEY=
 NEWSAPI_KEY=
-GMAIL_APP_PASSWORD=
-GMAIL_SENDER_ADDRESS=
-GMAIL_RECIPIENT_ADDRESS=
 ```
-
-`.gitignore` must include `agent/.env` and `data/nvda_daily_log.json`.
 
 ### 7.5 NYSE Half-Day Handling
 
-`pandas_market_calendars` returns session close times. If close time is before 4:00pm ET, the report includes a half-day notice. Macro risk weight is reduced by 5% on half-days (lower probability of high-impact events on shortened sessions).
+`pandas_market_calendars` returns close time. If close < 16:00 ET → half day. Report flagged; macro risk weight reduced by 5%.
 
 ---
 
@@ -399,38 +330,33 @@ GMAIL_RECIPIENT_ADDRESS=
 
 | Scenario | Expected Behavior |
 |---|---|
-| **NYSE holiday** | `pandas_market_calendars` check exits pipeline silently — no email sent |
-| **NYSE half-trading day** | Report generated normally; half-day flag added; macro weight reduced by 5% |
-| **yfinance returns null pre-market data** | Retry once after 3 minutes. If still null, email sent with market section marked "Unavailable" |
-| **NewsAPI returns 0 results** | Retry once. If still empty, score based on market data only, clearly flagged |
-| **Claude API timeout or error** | Catch exception, send plain-text fallback: "Pipeline error — manual check recommended today" |
-| **Pre-market move is extreme (>8%)** | Force both scores ≥ 8, override validation loop limit, flag "Extreme Move — High Confidence Override" |
-| **All news classified as recycled/noise** | Both scores floor at ≤4, regardless of market move, unless official IR news present |
-| **Validation loop fails to converge after 2 iterations** | Accept iteration-2 scores, append "Confidence: LOW" to email and dashboard |
-| **Gmail SMTP auth failure** | Log error, retry once after 2 minutes |
-| **Duplicate news items across sources** | Deduplication in classification step — same story from multiple sources counts as one signal |
-| **JSON log file missing or corrupted** | Agent recreates empty log file before appending; dashboard shows empty state gracefully |
-| **Dashboard loaded before today's report is ready** | Show yesterday's report with "Today's report not yet available" banner |
-| **Nvidia after-hours news posted, captured at 8:20am** | 18-hour lookback window captures it; classified as high-priority official disclosure |
+| **NYSE holiday** | Calendar check exits pipeline silently — dashboard shows previous day's report |
+| **NYSE half-trading day** | Report generated normally; "HALF SESSION" badge shown; macro weight reduced 5% |
+| **yfinance returns null pre-market data** | Pipeline continues; market section shows "N/A"; scores use available data |
+| **NewsAPI returns 0 results** | Score based on market data only; dashboard shows partial data banner |
+| **Claude API error / no credits** | Fallback report text used; scores from rule-based engine still written to log |
+| **Pre-market move >8%** | Both scores forced ≥ 8; validation loop bypassed; "Extreme Move" flag shown |
+| **All news classified as recycled** | Scores floored at ≤ 4 unless official IR news present |
+| **Validation loop fails to converge** | Scores from iteration 2 accepted; "Confidence: LOW" banner shown on dashboard |
+| **Duplicate news across sources** | Deduplication by first-60-char title match; highest tier source kept |
+| **JSON log missing or corrupted** | Agent recreates empty `[]` log before appending; dashboard shows empty state |
+| **Dashboard loaded before pipeline completes** | Previous day's report shown; no "loading" spinner needed |
+| **After-hours Nvidia news captured at 8:20am** | 18h lookback window captures it; classified as official disclosure |
+| **macOS SSL certificate errors on RSS feeds** | SSL verification bypassed with warning for local-tool context |
 
 ---
 
 ## 9. UI Style Preferences
 
-### Email
-- HTML formatted, calm financial-grade aesthetic
-- Monospace sections for data (prices, scores)
-- Dividers between sections
-- Color coding: amber for score ≥7, red for score ≥9, muted for score <4
-- No images or attachments in MVP
-
-### Dashboard (Next.js)
-- Dark background, clean sans-serif typography
-- Score displayed as large number with colored badge
-- Pre-market snapshot in a compact data grid
-- Score history as a dual-line chart (Attention + Thesis Risk)
-- Mobile-responsive layout
-- No login required
+**Dashboard (Next.js):**
+- Off-white warm background (`#f4f0e8`), orange accent (`#e84000`)
+- Fonts: Barlow Condensed (display, 900 weight for scores) + DM Mono (all data values)
+- 3-column grid layout: 72px orange accent bar / main body / 360px right panel
+- Score ≥ 7: orange. Thesis at_risk: red. Thesis intact: green.
+- Dark ticker tape strip for deliberate contrast (status bar)
+- No rounded corners, no shadows
+- Ghost oversized score number behind the hero (subtle branding)
+- Mobile-responsive not prioritized for MVP (personal desktop tool)
 
 ---
 
@@ -438,14 +364,15 @@ GMAIL_RECIPIENT_ADDRESS=
 
 | Feature | Priority |
 |---|---|
-| Configurable alert threshold (email only if score ≥ N) | High |
 | Peer monitoring: AMD, AVGO, TSM, SOXX | High |
-| Historical calibration and accuracy scoring | Medium |
+| Configurable score threshold (notify via system alert if score ≥ N) | High |
+| Historical calibration — tag days and track accuracy over time | Medium |
 | Sunday week-ahead summary | Medium |
-| Dashboard annotations (user can tag days manually) | Medium |
+| Dashboard annotations (manual tagging of report days) | Medium |
+| Export report as PDF | Low |
 | Multi-user support with auth | Low |
 
 ---
 
-*PRD v1.1 — NVIDIA Daily Report — Personal MVP*
+*PRD v1.2 — NVDA Daily Strategist — Dashboard-Only MVP*
 *Last updated: 2026-03-29*

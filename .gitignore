@@ -30,5 +30,5 @@ dashboard/out/
 logs/
 *.log
 
-# Design files (not part of production code)
-design/
+# Design explorations (option files not tracked)
+design/option-*.html
