@@ -1,147 +1,158 @@
 """
 NVDA Daily Signal — Macro Calendar Fetcher
-Fetches today's macro economic events from public RSS feeds.
+Fetches US economic events from ForexFactory's public XML calendar.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, date as _date
 from typing import Any
 
-import ssl
-import feedparser  # type: ignore[import]
-
-# macOS local SSL fix — acceptable for a personal local tool
-try:
-    _SSL_CTX = ssl.create_default_context()
-except Exception:  # noqa: BLE001
-    _SSL_CTX = None
+import requests
 
 logger = logging.getLogger(__name__)
 
-_FXSTREET_RSS = "https://www.fxstreet.com/economic-calendar/rss"
-_DOWJONES_RSS = "https://feeds.content.dowjones.io/public/rss/mktw_realtimecalendar"
+# ForexFactory publishes a free XML feed of the current week's events.
+_FOREXFACTORY_XML = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml"
 
-_IMPACT_KEYWORDS: dict[str, list[str]] = {
-    "high": [
-        "fed", "fomc", "interest rate", "cpi", "pce", "gdp", "nfp",
-        "nonfarm", "payroll", "unemployment", "inflation",
-    ],
-    "medium": [
-        "pmi", "ism", "retail", "housing", "durable", "trade balance",
-        "consumer confidence", "earnings",
-    ],
+_IMPACT_MAP = {
+    "High":   "high",
+    "Medium": "medium",
+    "Low":    "low",
+    "Holiday": "low",
+    "Non-Economic": "low",
 }
 
+_HIGH_IMPACT_KEYWORDS = [
+    "fed", "fomc", "interest rate", "cpi", "pce", "gdp",
+    "nfp", "nonfarm", "payroll", "unemployment", "inflation",
+]
 
-def _classify_impact(title: str, summary: str) -> str:
-    """Classify macro event impact as high / medium / low based on keywords."""
-    text = (title + " " + summary).lower()
-    for kw in _IMPACT_KEYWORDS["high"]:
-        if kw in text:
+_MEDIUM_IMPACT_KEYWORDS = [
+    "pmi", "ism", "retail", "housing", "durable", "trade balance",
+    "consumer confidence", "earnings",
+]
+
+
+def _classify_impact_from_title(title: str, ff_impact: str) -> str:
+    """Use ForexFactory impact level, then keyword fallback."""
+    mapped = _IMPACT_MAP.get(ff_impact)
+    if mapped in ("high", "medium"):
+        return mapped
+    # keyword fallback
+    lower = title.lower()
+    for kw in _HIGH_IMPACT_KEYWORDS:
+        if kw in lower:
             return "high"
-    for kw in _IMPACT_KEYWORDS["medium"]:
-        if kw in text:
+    for kw in _MEDIUM_IMPACT_KEYWORDS:
+        if kw in lower:
             return "medium"
-    return "low"
+    return mapped or "low"
 
 
-def _parse_feed(url: str) -> list[dict[str, Any]]:
-    """Parse a macro calendar RSS feed and return today's events."""
+def _parse_forexfactory(reference_date: _date | None = None) -> list[dict[str, Any]]:
+    """
+    Fetch and parse the ForexFactory weekly XML calendar.
+    Returns USD events for the target date only.
+    """
+    target_date = reference_date or datetime.now(timezone.utc).date()
     events: list[dict[str, Any]] = []
-    today = datetime.now(timezone.utc).date()
 
     try:
-        feed = feedparser.parse(url, handlers=[])
-        # If SSL error, retry without verification (local tool only)
-        if feed.bozo and "CERTIFICATE" in str(feed.bozo_exception).upper():
-            import urllib.request
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            req = urllib.request.urlopen(url, context=ctx, timeout=10)
-            feed = feedparser.parse(req.read().decode("utf-8"))
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; NVDA-signal-bot/1.0)"}
+        resp = requests.get(_FOREXFACTORY_XML, timeout=15, headers=headers)
+        resp.raise_for_status()
 
-        if feed.bozo and not feed.entries:
-            logger.warning("Feed parse warning for %s: %s", url, feed.bozo_exception)
-            return events
+        root = ET.fromstring(resp.content)
 
-        for entry in feed.entries:
-            title = entry.get("title", "").strip()
-            summary = entry.get("summary", entry.get("description", "")).strip()
-
-            # Parse published/scheduled time
-            pub_parsed = entry.get("published_parsed") or entry.get("updated_parsed")
-            scheduled_at = ""
-            entry_date = None
-
-            if pub_parsed:
-                try:
-                    dt = datetime(*pub_parsed[:6], tzinfo=timezone.utc)
-                    entry_date = dt.date()
-                    scheduled_at = dt.isoformat()
-                except Exception:  # noqa: BLE001
-                    pass
-
-            # Only include today's events
-            if entry_date is not None and entry_date != today:
+        for event in root.findall("event"):
+            # Only USD events matter for NVDA
+            country = (event.findtext("country") or "").strip()
+            if country != "USD":
                 continue
 
+            title = (event.findtext("title") or "").strip()
             if not title:
                 continue
 
-            impact = _classify_impact(title, summary)
-            events.append(
-                {
-                    "event": title,
-                    "description": summary[:300],
-                    "scheduled_at": scheduled_at,
-                    "impact": impact,
-                }
-            )
+            # ForexFactory date format: MM-DD-YYYY
+            date_raw = (event.findtext("date") or "").strip()
+            event_date: _date | None = None
+            if date_raw:
+                try:
+                    event_date = datetime.strptime(date_raw, "%m-%d-%Y").date()
+                except ValueError:
+                    pass
 
-        logger.info("Parsed %d today-events from %s", len(events), url)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Failed to parse macro feed %s: %s", url, exc)
+            if event_date is None or event_date != target_date:
+                continue
 
-    return events
+            time_raw = (event.findtext("time") or "").strip()
+            ff_impact = (event.findtext("impact") or "Low").strip()
+            forecast = (event.findtext("forecast") or "").strip()
+            previous = (event.findtext("previous") or "").strip()
 
+            impact = _classify_impact_from_title(title, ff_impact)
 
-async def get_macro_events() -> list[dict[str, Any]]:
-    """
-    Fetch today's macro economic events from RSS feeds.
+            # Build a scheduled_at ISO string if we can parse the time
+            scheduled_at = ""
+            if time_raw and time_raw.lower() not in ("all day", "tentative", ""):
+                try:
+                    import pytz
+                    et_tz = pytz.timezone("America/New_York")
+                    t = datetime.strptime(time_raw, "%I:%M%p")
+                    dt_et = et_tz.localize(
+                        datetime(event_date.year, event_date.month, event_date.day,
+                                 t.hour, t.minute)
+                    )
+                    scheduled_at = dt_et.astimezone(timezone.utc).isoformat()
+                except Exception:  # noqa: BLE001
+                    scheduled_at = ""
 
-    Tries FXStreet RSS first, then Dow Jones / MarketWatch.
-    Returns an empty list on any failure — macro events unavailable is acceptable.
-    """
-    loop = asyncio.get_event_loop()
+            description = ""
+            if forecast:
+                description += f"Forecast: {forecast}"
+            if previous:
+                description += f"  Previous: {previous}"
 
-    events: list[dict[str, Any]] = []
-
-    try:
-        fxstreet_events, dowjones_events = await asyncio.gather(
-            loop.run_in_executor(None, _parse_feed, _FXSTREET_RSS),
-            loop.run_in_executor(None, _parse_feed, _DOWJONES_RSS),
-        )
-
-        # Combine and deduplicate by event title
-        seen_titles: set[str] = set()
-        for event in fxstreet_events + dowjones_events:
-            t = event["event"].lower()[:60]
-            if t not in seen_titles:
-                seen_titles.add(t)
-                events.append(event)
+            events.append({
+                "event": title,
+                "description": description.strip(),
+                "scheduled_at": scheduled_at,
+                "impact": impact,
+            })
 
         # Sort by impact priority (high first)
         impact_order = {"high": 0, "medium": 1, "low": 2}
         events.sort(key=lambda e: impact_order.get(e.get("impact", "low"), 2))
 
-        logger.info("Total macro events for today: %d", len(events))
+        logger.info("ForexFactory: %d USD events for %s.", len(events), target_date)
 
     except Exception as exc:  # noqa: BLE001
-        print(f"[macro_calendar] Failed to fetch macro events: {exc}")
-        return []
+        logger.warning("ForexFactory macro calendar failed: %s", exc)
 
     return events
+
+
+async def get_macro_events(reference_date: _date | None = None) -> list[dict[str, Any]]:
+    """
+    Fetch US macro economic events for the target date from ForexFactory.
+
+    Parameters
+    ----------
+    reference_date:
+        Date to fetch events for. Defaults to today UTC.
+
+    Returns an empty list on failure — macro data unavailable is acceptable.
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        events = await loop.run_in_executor(None, _parse_forexfactory, reference_date)
+        logger.info("Total macro events: %d", len(events))
+        return events
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("get_macro_events failed: %s", exc)
+        return []

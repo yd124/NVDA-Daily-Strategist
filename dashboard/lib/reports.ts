@@ -26,8 +26,16 @@ function readLogFile(): DailyEntry[] {
 
 export function getAllReports(): DailyEntry[] {
   const reports = readLogFile()
+  // Deduplicate by date, keeping the entry with the latest run_timestamp
+  const byDate = new Map<string, DailyEntry>()
+  for (const r of reports) {
+    const existing = byDate.get(r.date)
+    if (!existing || r.run_timestamp > existing.run_timestamp) {
+      byDate.set(r.date, r)
+    }
+  }
   // Sort by date descending (most recent first)
-  return reports.sort((a, b) => {
+  return Array.from(byDate.values()).sort((a, b) => {
     if (a.date < b.date) return 1
     if (a.date > b.date) return -1
     return 0

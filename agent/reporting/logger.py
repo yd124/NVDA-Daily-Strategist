@@ -55,7 +55,18 @@ def append_to_log(entry: dict[str, Any], log_path: Path) -> bool:
                 )
                 existing = []
 
-        existing.append(entry)
+        # Replace existing entry for the same date, or append if new
+        entry_date = entry.get("date")
+        replaced = False
+        if entry_date:
+            for i, existing_entry in enumerate(existing):
+                if existing_entry.get("date") == entry_date:
+                    existing[i] = entry
+                    replaced = True
+                    logger.info("Replaced existing log entry for date %s.", entry_date)
+                    break
+        if not replaced:
+            existing.append(entry)
 
         # Write atomically via temp file + rename
         tmp_path = log_path.with_suffix(".tmp")

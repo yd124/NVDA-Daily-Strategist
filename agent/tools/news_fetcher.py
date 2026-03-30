@@ -19,7 +19,9 @@ from agent.tools.source_verifier import get_source_tier
 logger = logging.getLogger(__name__)
 
 _NEWSAPI_URL = "https://newsapi.org/v2/everything"
-_NVIDIA_IR_RSS = "https://investor.nvidia.com/rss/news_releases.ashx?exchange=&category=&action=getall"
+# SEC EDGAR NVDA 8-K filings feed (CIK 1045810) — official material event disclosures
+_SEC_EDGAR_URL = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001045810&type=8-K&dateb=&owner=include&count=10&search_text=&output=atom"
+_SEC_HEADERS = {"User-Agent": "NVDA-signal/1.0 contact@nvdasignal.local"}
 
 
 def _headlines_similar(h1: str, h2: str) -> bool:
@@ -47,21 +49,41 @@ def _deduplicate(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return unique
 
 
-def _fetch_newsapi(api_key: str, lookback_hours: int) -> list[dict[str, Any]]:
+def _fetch_newsapi(
+    api_key: str,
+    lookback_hours: int,
+    reference_date: "date | None" = None,
+) -> list[dict[str, Any]]:
     """Fetch news from NewsAPI Everything endpoint."""
+    from datetime import date as _date  # local import to avoid circular
+
     items: list[dict[str, Any]] = []
     try:
-        from_dt = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+        if reference_date is not None:
+            # Fetch news relative to the reference date: from (reference_date - lookback) to end of reference_date
+            ref_end = datetime(
+                reference_date.year, reference_date.month, reference_date.day,
+                23, 59, 59, tzinfo=timezone.utc,
+            )
+            from_dt = ref_end - timedelta(hours=lookback_hours)
+            to_str = ref_end.strftime("%Y-%m-%dT%H:%M:%SZ")
+        else:
+            from_dt = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+            to_str = None
+
         from_str = from_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         params = {
-            "q": 'NVDA OR Nvidia OR "Nvidia Corporation"',
+            "q": 'NVDA OR "Nvidia stock" OR "Nvidia earnings" OR "Nvidia revenue" OR "Jensen Huang" OR "Nvidia shares" OR "Nvidia Corporation"',
+            "searchIn": "title,description",
             "from": from_str,
             "sortBy": "publishedAt",
             "language": "en",
             "pageSize": 20,
             "apiKey": api_key,
         }
+        if to_str:
+            params["to"] = to_str
 
         resp = requests.get(_NEWSAPI_URL, params=params, timeout=15)
         resp.raise_for_status()
@@ -94,47 +116,80 @@ def _fetch_newsapi(api_key: str, lookback_hours: int) -> list[dict[str, Any]]:
     return items
 
 
-def _fetch_nvidia_ir_rss() -> list[dict[str, Any]]:
-    """Fetch Nvidia investor-relations RSS feed and return last 10 entries."""
+_SEC_ITEM_LABELS = {
+    "1.01": "Material Agreement",
+    "1.02": "Agreement Termination",
+    "2.02": "Earnings / Results of Operations",
+    "2.03": "Obligation / Off-Balance Sheet",
+    "5.02": "Executive / Director Change",
+    "7.01": "Regulation FD Disclosure",
+    "8.01": "Material Event / Press Release",
+    "9.01": None,  # Always "Exhibits" — skip
+}
+
+
+def _fetch_sec_edgar_8k() -> list[dict[str, Any]]:
+    """Fetch NVDA 8-K filings from SEC EDGAR as official disclosure items."""
     items: list[dict[str, Any]] = []
     try:
-        feed = feedparser.parse(_NVIDIA_IR_RSS)
+        resp = requests.get(_SEC_EDGAR_URL, headers=_SEC_HEADERS, timeout=15)
+        resp.raise_for_status()
+        feed = feedparser.parse(resp.text)
+
         for entry in feed.entries[:10]:
-            headline = entry.get("title", "").strip()
-            if not headline:
-                continue
+            items_desc = entry.get("items-desc", "").strip()
+            filing_date = entry.get("filing-date", "").strip()
+            link = entry.get("link", "")
+            form_name = entry.get("form-name", "8-K").strip()
 
-            pub_parsed = entry.get("published_parsed")
+            # Build a meaningful headline from items-desc.
+            # Format is compact: "items 2.02 and 9.01" or "item 5.02"
+            import re as _re
+            item_numbers = _re.findall(r"\d+\.\d+", items_desc.lower())
+            meaningful = [
+                _SEC_ITEM_LABELS[n]
+                for n in item_numbers
+                if n in _SEC_ITEM_LABELS and _SEC_ITEM_LABELS[n] is not None
+            ]
+            if meaningful:
+                headline = f"NVDA 8-K: {' / '.join(meaningful)}"
+            else:
+                headline = f"NVDA SEC {form_name} Filing"
+
+            # Parse filing date
             pub_iso = ""
-            if pub_parsed:
+            if filing_date:
                 try:
-                    pub_iso = datetime(*pub_parsed[:6], tzinfo=timezone.utc).isoformat()
-                except Exception:  # noqa: BLE001
-                    pub_iso = entry.get("published", "")
-
-            link = entry.get("link", _NVIDIA_IR_RSS)
-            tier = 1  # investor.nvidia.com is tier 1
+                    pub_iso = datetime.strptime(filing_date, "%Y-%m-%d").replace(
+                        tzinfo=timezone.utc
+                    ).isoformat()
+                except ValueError:
+                    pub_iso = ""
 
             items.append(
                 {
                     "headline": headline,
-                    "source": "Nvidia Investor Relations",
+                    "source": "SEC EDGAR",
                     "source_url": link,
                     "published_at": pub_iso,
-                    "raw_description": entry.get("summary", "")[:500],
-                    "_tier": tier,
-                    "source_tier": tier,
+                    "raw_description": items_desc[:500],
+                    "_tier": 1,  # SEC is tier 1 — official government source
+                    "source_tier": 1,
                 }
             )
 
-        logger.info("Nvidia IR RSS returned %d entries.", len(items))
+        logger.info("SEC EDGAR returned %d NVDA 8-K entries.", len(items))
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Nvidia IR RSS fetch failed: %s", exc)
+        logger.warning("SEC EDGAR fetch failed: %s", exc)
 
     return items
 
 
-async def get_nvda_news(api_key: str, lookback_hours: int = 18) -> list[dict[str, Any]]:
+async def get_nvda_news(
+    api_key: str,
+    lookback_hours: int = 18,
+    reference_date: "date | None" = None,
+) -> list[dict[str, Any]]:
     """
     Fetch NVDA-related news from NewsAPI and Nvidia IR RSS.
 
@@ -144,6 +199,9 @@ async def get_nvda_news(api_key: str, lookback_hours: int = 18) -> list[dict[str
         NewsAPI key.
     lookback_hours:
         How many hours back to fetch news for.
+    reference_date:
+        If provided, fetches news relative to this date instead of now.
+        Used when running with --date override.
 
     Returns
     -------
@@ -154,13 +212,13 @@ async def get_nvda_news(api_key: str, lookback_hours: int = 18) -> list[dict[str
 
     try:
         # Run both fetches concurrently in thread pool
-        newsapi_items, ir_items = await asyncio.gather(
-            loop.run_in_executor(None, _fetch_newsapi, api_key, lookback_hours),
-            loop.run_in_executor(None, _fetch_nvidia_ir_rss),
+        newsapi_items, sec_items = await asyncio.gather(
+            loop.run_in_executor(None, _fetch_newsapi, api_key, lookback_hours, reference_date),
+            loop.run_in_executor(None, _fetch_sec_edgar_8k),
         )
 
-        # Combine: IR first (higher priority), then NewsAPI
-        combined = list(ir_items) + list(newsapi_items)
+        # Combine: SEC filings first (tier 1, highest priority), then NewsAPI
+        combined = list(sec_items) + list(newsapi_items)
 
         # Deduplicate
         deduped = _deduplicate(combined)

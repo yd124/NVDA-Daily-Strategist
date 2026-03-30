@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import { getAllReports, getRecentScores } from '@/lib/reports'
 import ScoreHistoryChart from '@/components/ScoreHistoryChart'

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { getLatestReport, getRecentScores } from '@/lib/reports'
 import ScoreHero from '@/components/ScoreHero'
 import TickerTape from '@/components/TickerTape'

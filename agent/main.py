@@ -207,10 +207,14 @@ async def main() -> None:
     override_date = None
     if args.date:
         try:
-            override_date = date.fromisoformat(args.date)
+            raw_date = args.date.strip()
+            # Normalize YYYYMMDD → YYYY-MM-DD so both formats work
+            if len(raw_date) == 8 and raw_date.isdigit():
+                raw_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:]}"
+            override_date = date.fromisoformat(raw_date)
             logger.info("Date override: %s", override_date)
         except ValueError:
-            logger.error("Invalid --date format '%s'. Expected YYYY-MM-DD.", args.date)
+            logger.error("Invalid --date format '%s'. Expected YYYY-MM-DD or YYYYMMDD.", args.date)
             sys.exit(1)
 
     run_timestamp = datetime.now(timezone.utc).isoformat()
@@ -260,8 +264,8 @@ async def main() -> None:
 
     results = await asyncio.gather(
         get_market_data(),
-        get_nvda_news(newsapi_key, NEWS_LOOKBACK_HOURS),
-        get_macro_events(),
+        get_nvda_news(newsapi_key, NEWS_LOOKBACK_HOURS, override_date),
+        get_macro_events(override_date),
         return_exceptions=True,
     )
 
@@ -313,7 +317,7 @@ async def main() -> None:
             NEWS_EXTENDED_LOOKBACK_HOURS,
         )
         try:
-            extended_news = await get_nvda_news(newsapi_key, NEWS_EXTENDED_LOOKBACK_HOURS)
+            extended_news = await get_nvda_news(newsapi_key, NEWS_EXTENDED_LOOKBACK_HOURS, override_date)
             if extended_news:
                 news_items = extended_news
                 logger.info("Extended news fetch returned %d items.", len(news_items))
@@ -408,7 +412,7 @@ async def main() -> None:
         data_sources_available.append("yfinance")
     if "news" not in data_sources_failed:
         data_sources_available.append("newsapi")
-        data_sources_available.append("nvidia_ir_rss")
+        data_sources_available.append("sec_edgar_8k")
     if "macro_calendar" not in data_sources_failed:
         data_sources_available.append("macro_rss")
 
